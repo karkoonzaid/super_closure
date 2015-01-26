@@ -13,7 +13,7 @@ $helloWorld = function ($name = 'World') use ($greeting) {
 
 // Token
 $time = microtime(true);
-$serializer = new Serializer(new TokenAnalyzer);
+$serializer = new Serializer(new TokenAnalyzer, 'key');
 for ($i = 0; $i < 1000; $i++) {
     $serializer->serialize($helloWorld);
 }
@@ -22,7 +22,7 @@ echo "Token Analyzer: " . round($time, 3) . " seconds.\n";
 
 // AST
 $time = microtime(true);
-$serializer = new Serializer(new AstAnalyzer);
+$serializer = new Serializer(new AstAnalyzer, 'key');
 for ($i = 0; $i < 1000; $i++) {
     $serializer->serialize($helloWorld);
 }

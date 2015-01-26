@@ -2,6 +2,7 @@
 
 use SuperClosure\Analyzer\AstAnalyzer as DefaultAnalyzer;
 use SuperClosure\Analyzer\ClosureAnalyzer;
+use SuperClosure\Exception\ClosureUnserializationException;
 
 /**
  * This is the serializer class used for serializing Closure objects.
@@ -39,13 +40,23 @@ class Serializer implements SerializerInterface
     private $analyzer;
 
     /**
+     * The HMAC key to sign the request.
+     *
+     * @var string
+     */
+    private $signingKey;
+
+    /**
      * Create a new serializer instance.
      *
      * @param ClosureAnalyzer|null $analyzer
      */
-    public function __construct(ClosureAnalyzer $analyzer = null)
-    {
+    public function __construct(
+        ClosureAnalyzer $analyzer = null,
+        $signingKey = null
+    ) {
         $this->analyzer = $analyzer ?: new DefaultAnalyzer;
+        $this->signingKey = $signingKey;
     }
 
     /**
@@ -53,7 +64,14 @@ class Serializer implements SerializerInterface
      */
     public function serialize(\Closure $closure)
     {
-        return serialize(new SerializableClosure($closure, $this));
+        $serialized = serialize(new SerializableClosure($closure, $this));
+
+        if ($this->signingKey) {
+            $signature = $this->calculateSignature($serialized);
+            $serialized = serialize([$serialized, $signature]);
+        }
+
+        return $serialized;
     }
 
     /**
@@ -61,8 +79,19 @@ class Serializer implements SerializerInterface
      */
     public function unserialize($serialized)
     {
-        /** @var SerializableClosure $unserialized */
         $unserialized = unserialize($serialized);
+
+        if ($this->signingKey) {
+            list($data, $signature) = $unserialized;
+            if ($signature !== $this->calculateSignature($data)) {
+                throw new ClosureUnserializationException('The signature of the'
+                    . ' closure\'s data is invalid, which means the serialized '
+                    . 'closure has been modified and is unsafe to unserialize.'
+                );
+            }
+            /** @var SerializableClosure $unserialized */
+            $unserialized = unserialize($data);
+        }
 
         return $unserialized->getClosure();
     }
@@ -135,5 +164,17 @@ class Serializer implements SerializerInterface
                 }
             }
         }
+    }
+
+    /**
+     * Calculates a signature for a closure's serialized data.
+     *
+     * @param string $data Serialized closure data.
+     *
+     * @return string Signature of the closure's data.
+     */
+    private function calculateSignature($data)
+    {
+        return hash_hmac('sha256', $data, $this->signingKey);
     }
 }
